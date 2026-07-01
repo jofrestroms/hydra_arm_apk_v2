@@ -1,0 +1,28 @@
+<ion-content [fullscreen]="true" class="login-background">
+  <div class="login-container">
+    <div class="login-header">
+      <ion-icon name="person-circle-outline" class="logo-icon"></ion-icon>
+      <h1>Bienvenido</h1>
+      <p>Ingresa tus credenciales para continuar</p>
+    </div>
+    <div class="form-card">
+      <ion-item lines="none" class="custom-input">
+        <ion-icon name="card-outline" slot="start"></ion-icon>
+        <ion-input label="RUT" labelPlacement="floating" placeholder="12.345.678-k" [(ngModel)]="rut" (ionInput)="onRutInput($event)" type="text"></ion-input>
+      </ion-item>
+      <ion-item lines="none" class="custom-input">
+        <ion-icon name="lock-closed-outline" slot="start"></ion-icon>
+        <ion-input label="Contraseña" labelPlacement="floating" placeholder="********" [(ngModel)]="password" type="password"></ion-input>
+      </ion-item>
+      <ion-text *ngIf="mensajeError" color="danger" class="error-message"><p>{{ mensajeError }}</p></ion-text>
+      <ion-button expand="block" (click)="login()" class="login-btn" [disabled]="cargando">
+        <ion-spinner *ngIf="cargando" slot="start"></ion-spinner>
+        {{ cargando ? 'Iniciando sesión...' : 'Iniciar Sesión' }}
+        <ion-icon *ngIf="!cargando" name="arrow-forward-outline" slot="end"></ion-icon>
+      </ion-button>
+    </div>
+    <div class="login-footer">
+      <p>¿Olvidaste tu contraseña? <a>Recupérala aquí</a></p>
+    </div>
+  </div>
+</ion-content>

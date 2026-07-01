@@ -1,0 +1,31 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Seleccionar Paciente</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <div class="ion-padding">
+    <h2>Bienvenido, {{ familiar?.nombre }}</h2>
+    <p>Selecciona el paciente que deseas supervisar:</p>
+
+    <ion-spinner *ngIf="cargando" style="display:block; margin: 20px auto;"></ion-spinner>
+
+    <ion-list *ngIf="!cargando">
+      <ion-item *ngFor="let p of pacientes" button (click)="seleccionarPaciente(p)">
+        <ion-avatar slot="start">
+          <ion-icon name="person-circle-outline" style="font-size: 40px;"></ion-icon>
+        </ion-avatar>
+        <ion-label>
+          <h2>{{ p.display?.nombre }} {{ p.display?.apellidoPaterno }} {{ p.display?.apellidoMaterno }}</h2>
+          <p>RUN: {{ p.display?.runP }}</p>
+        </ion-label>
+        <ion-icon name="chevron-forward-outline" slot="end"></ion-icon>
+      </ion-item>
+    </ion-list>
+
+    <ion-text *ngIf="!cargando && pacientes.length === 0" color="medium">
+      <p>No tienes pacientes asignados.</p>
+    </ion-text>
+  </div>
+</ion-content>
