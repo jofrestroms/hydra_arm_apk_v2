@@ -1,10 +1,22 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Perfil</ion-title>
+    <ion-buttons slot="start">
+      <ion-back-button></ion-back-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
 <ion-content [fullscreen]="true" class="body">
   <div class="profile-header" *ngFor="let p of Usuario">
-    <div class="avatar-container">
+    <div class="avatar-container" (click)="cambiarFoto()">
       <img [src]="previewUrl || 'assets/default-avatar.png'" class="profile-img">
+      <div class="avatar-overlay" *ngIf="!subiendoFoto">
+        <ion-icon name="camera-outline"></ion-icon>
+      </div>
+      <ion-spinner name="crescent" *ngIf="subiendoFoto" class="avatar-spinner"></ion-spinner>
     </div>
     <div class="profile-info-main">
-      <h2>{{ p.nombre }}</h2>
+      <h2>{{ p.nombre || p.apellidoMaterno }}</h2>
       <p class="username">{{ p.runP }}</p>
     </div>
 
@@ -64,17 +76,22 @@
           <th style="text-align: center;">Acciones</th>
         </tr>
       </thead>
-      <tbody>
-        <tr *ngFor="let doc of listaExamenes">
+      <tbody  *ngIf="listaExamenes.length > 0">
+        <tr *ngFor="let doc of listaExamenes" >
           <td>{{ doc.fechaCreacion | date:'dd/MM/yyyy' }}</td>
           <td class="file-name-cell">{{ doc.nombre }}</td>
           <td style="text-align: center;">
             <ion-button fill="clear" size="small" [href]="doc.url" target="_blank">
               <ion-icon name="download-outline" slot="icon-only" color="primary"></ion-icon>
+              descargar
             </ion-button>
           </td>
         </tr>
       </tbody>
+      <tbody *ngIf="listaExamenes.length === 0">
+        <tr>
+          <td colspan="3" style="text-align: center;">El paciente no tiene documentos disponibles</td>
+        </tr>
     </table>
   </ion-card>
 </ion-content>

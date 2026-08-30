@@ -8,8 +8,7 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
     cleartext: false,
     allowNavigation: [
-      'api.hydra.cl',
-      '*.hydra.cl'
+      '*.onrender.com'
     ]
   },
   android: {

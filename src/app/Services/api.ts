@@ -1,170 +1,112 @@
-import { HttpClient, HttpParams, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { from, Observable, throwError } from 'rxjs';
-import { switchMap, catchError } from 'rxjs/operators';
-import { AuthService } from './auth.service';
+import { Observable } from 'rxjs';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
 
-  private url = 'https://api.hydra.cl/api';
+  private url = 'https://hydra-crud.onrender.com/api';
 
   constructor(
-    private http: HttpClient,
-    private auth: AuthService
+    private http: HttpClient
   ) {}
 
-  private async getAuthHeaders(): Promise<HttpHeaders> {
-    const token = await this.auth.getAccessToken();
-    return new HttpHeaders({
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    });
+  private getHeaders(): HttpHeaders {
+    return new HttpHeaders({ 'Content-Type': 'application/json' });
   }
 
   private handleRequest<T>(request: Observable<T>): Observable<T> {
-    return request.pipe(
-      catchError((error: HttpErrorResponse) => {
-        if (error.status === 401) {
-          return from(this.auth.refresh()).pipe(
-            switchMap((refreshed) => {
-              if (refreshed) {
-                return from(this.getAuthHeaders()).pipe(
-                  switchMap((headers) => {
-                    const url = error.url || '';
-                    const method = error.error?.message ? 'POST' : 'GET';
-                    return this.http.request<T>(method, url, { headers });
-                  })
-                );
-              }
-              this.auth.logout();
-              return throwError(() => new Error('Sesion expirada'));
-            })
-          );
-        }
-        return throwError(() => error);
-      })
-    );
+    return request;
   }
 
   getPacientes() {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.get<any[]>(`${this.url}/pacientes`, { headers: h }))
-      )
+      this.http.get<any[]>(`${this.url}/pacientes`, { headers: this.getHeaders() })
     );
   }
 
   getPaciente(run: string) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.get<any>(`${this.url}/pacientes/${run}`, { headers: h }))
-      )
+      this.http.get<any>(`${this.url}/pacientes/${run}`, { headers: this.getHeaders() })
     );
   }
 
   postPacientes(data: any) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.post<any>(`${this.url}/pacientes`, data, { headers: h }))
-      )
+      this.http.post<any>(`${this.url}/pacientes`, data, { headers: this.getHeaders() })
     );
   }
 
   updatePaciente(run: string, data: any) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.put<any>(`${this.url}/pacientes/${run}`, data, { headers: h }))
-      )
+      this.http.put<any>(`${this.url}/pacientes/${run}`, data, { headers: this.getHeaders() })
     );
   }
 
   deletePaciente(run: string) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.delete(`${this.url}/pacientes/${run}`, { headers: h }))
-      )
+      this.http.delete(`${this.url}/pacientes/${run}`, { headers: this.getHeaders() })
     );
   }
 
   getPaises() {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.get<any[]>(`${this.url}/pais`, { headers: h }))
-      )
+      this.http.get<any[]>(`${this.url}/pais`, { headers: this.getHeaders() })
     );
   }
 
   getPais(id: number) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.get<any>(`${this.url}/pais/${id}`, { headers: h }))
-      )
+      this.http.get<any>(`${this.url}/pais/${id}`, { headers: this.getHeaders() })
     );
   }
 
   postPais(data: any) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.post<any>(`${this.url}/pais`, data, { headers: h }))
-      )
+      this.http.post<any>(`${this.url}/pais`, data, { headers: this.getHeaders() })
     );
   }
 
   updatePais(id: number, data: any) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.put<any>(`${this.url}/pais/${id}`, data, { headers: h }))
-      )
+      this.http.put<any>(`${this.url}/pais/${id}`, data, { headers: this.getHeaders() })
     );
   }
 
   deletePais(id: number) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.delete(`${this.url}/pais/${id}`, { headers: h }))
-      )
+      this.http.delete(`${this.url}/pais/${id}`, { headers: this.getHeaders() })
     );
   }
 
   getFamiliares() {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.get<any[]>(`${this.url}/familiares`, { headers: h }))
-      )
+      this.http.get<any[]>(`${this.url}/familiares`, { headers: this.getHeaders() })
     );
   }
 
   getFamiliar(run: string) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.get<any>(`${this.url}/familiares/${run}`, { headers: h }))
-      )
+      this.http.get<any>(`${this.url}/familiares/${run}`, { headers: this.getHeaders() })
     );
   }
 
   getPacientesDeFamiliar(run: string) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.get<any[]>(`${this.url}/familiares/${run}/pacientes`, { headers: h }))
-      )
+      this.http.get<any[]>(`${this.url}/familiares/${run}/pacientes`, { headers: this.getHeaders() })
     );
   }
 
   postBpm(data: any) {
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.post<any>(`${this.url}/bpm`, data, { headers: h }))
-      )
+      this.http.post<any>(`${this.url}/bpm`, data, { headers: this.getHeaders() })
     );
   }
 
   getBpmPorRango(runP: string, inicio: string, fin: string) {
     const params = new HttpParams().set('runP', runP).set('inicio', inicio).set('fin', fin);
     return this.handleRequest(
-      from(this.getAuthHeaders()).pipe(
-        switchMap(h => this.http.get<any[]>(`${this.url}/bpm/search`, { headers: h, params }))
-      )
+      this.http.get<any[]>(`${this.url}/bpm/search`, { headers: this.getHeaders(), params })
     );
   }
 }

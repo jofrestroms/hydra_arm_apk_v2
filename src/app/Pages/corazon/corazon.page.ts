@@ -8,6 +8,7 @@ import { ApiService } from '../../Services/api';
 import { NavController, AlertController, ToastController } from '@ionic/angular';
 import { Esp32Service } from '../../Services/esp32';
 import { UsuarioService } from '../../Services/usuario-service';
+import { Crypto } from '../../Services/crypto';
 
 @Component({
   selector: 'app-corazon',
@@ -17,42 +18,43 @@ import { UsuarioService } from '../../Services/usuario-service';
 })
 export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
 
+  
+  
   connectionStatus = false;
   dispositivoConectado = 'Ninguno';
   datosRecibidos = 'Inicializando...';
   modoConexion: 'ble' | 'wifi' | 'simulacion' | 'ninguna' = 'ninguna';
-
+  
   bpmActual = '--';
   presionActual = '--/--';
   bateriaActual = 100;
   latitudActual = -33.4489;
   longitudActual = -70.6693;
-
+  
   macInput = '';
   ipInput = '';
-
-  private jwtToken = '';
+  
   private readonly OFFLINE_SECRET_KEY = 'clave-local-ultra-segura-32bytes!';
   private offlineQueue: string[] = [];
   private cryptoKey: CryptoKey | null = null;
-
+  
   dispositivosBLE: { deviceId: string; name: string; rssi?: number }[] = [];
   escaneando = false;
-
+  
   private readonly SERVICE_UUID = '12345678-1234-1234-1234-123456789abc';
   private readonly CHARACTERISTIC_UUID = 'abcdefab-1234-1234-1234-abcdefabcdef';
-
+  
   @ViewChild('heartChartCanvas') chartCanvas!: ElementRef<HTMLCanvasElement>;
   heartChart!: Chart;
   bpmData: number[] = [];
   timestamps: string[] = [];
-
+  
   private simulationInterval: any;
   private reconexionInterval: any;
   private gpsInterval: any;
   private listeners: PluginListenerHandle[] = [];
   runP = '';
-
+  
   constructor(
     private api: ApiService,
     private router: Router,
@@ -60,12 +62,22 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     private alertCtrl: AlertController,
     private toastCtrl: ToastController,
     private esp32: Esp32Service,
-    private usuarioService: UsuarioService
-  ) {}
+    private usuarioService: UsuarioService,
+    private Crypto: Crypto
+  ) { }
+  
+  previewUrl: string = '';
+
+  async cargarFoto(run: string) {
+    const url = await this.Crypto.obtenerFotoPorRut(run)
+    if (url) {
+      this.previewUrl = url;
+    }
+  }
 
   async ngOnInit() {
     console.log('CorazonPage iniciada');
-
+    
     const sesion = localStorage.getItem('hydra_sesion');
     if (sesion) {
       const s = JSON.parse(sesion);
@@ -74,7 +86,6 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
       this.runP = localStorage.getItem('runP') || '';
     }
 
-    this.jwtToken = 'JWT_SIMULADO_SPRING_BOOT';
     await this.inicializarClave();
     this.esp32.cargarCredenciales();
     this.macInput = this.esp32.getMac();
@@ -110,7 +121,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
         const pos = await Geolocation.getCurrentPosition();
         this.latitudActual = pos.coords.latitude;
         this.longitudActual = pos.coords.longitude;
-      } catch {}
+      } catch { }
     }, 30000);
   }
 
@@ -151,7 +162,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
       await this.mostrarToast('No se encontraron dispositivos Bluetooth cercanos', 'warning');
       return;
     }
-    const inputs = this.dispositivosBLE.map((d, index) => ({ type: 'radio', label: `${d.name}\nID: ${d.deviceId}${d.rssi ? ' - RSSI: ' + d.rssi + ' dBm' : ''}`, value: d.deviceId, checked: index === 0 }));
+    const inputs = this.dispositivosBLE.map((d, index) => ({ type: 'radio' as const, label: `${d.name}\nID: ${d.deviceId}${d.rssi ? ' - RSSI: ' + d.rssi + ' dBm' : ''}`, value: d.deviceId, checked: index === 0 }));
     const alert = await this.alertCtrl.create({
       header: 'Dispositivos encontrados', subHeader: `${this.dispositivosBLE.length} dispositivo(s) cerca`, inputs,
       buttons: [
@@ -390,7 +401,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     this.presionActual = '--/--';
   }
 
-  private limpiarListeners() { this.listeners.forEach(l => { try { l.remove(); } catch {} }); this.listeners = []; }
+  private limpiarListeners() { this.listeners.forEach(l => { try { l.remove(); } catch { } }); this.listeners = []; }
 
   async mostrarToast(mensaje: string, color: string) {
     const toast = await this.toastCtrl.create({ message: mensaje, duration: 2500, color, position: 'bottom' });
@@ -398,13 +409,43 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async irPerfil() {
-    const u = localStorage.getItem("Usuario_Safe");
-    if (u) {
-      const uD = await this.usuarioService.desencriptarAJson(u);
-      if (uD && uD.runP) { this.router.navigate(['/perfil'], { state: { rut: uD.runP } }); return; }
+  const sesion = localStorage.getItem('hydra_sesion');
+
+  if (!sesion) {
+    this.router.navigate(['/login']);
+    return;
+  }
+
+  try {
+    const datosSesion = JSON.parse(sesion);
+
+    if (!datosSesion?.dbId) {
+      this.router.navigate(['/login']);
+      return;
     }
+
+    const usuario = await this.usuarioService.obtenerUsuarioPorDbId(
+      datosSesion.dbId
+    );
+
+    if (!usuario) {
+      this.router.navigate(['/login']);
+      return;
+    }
+
+    console.log('Usuario encontrado:', usuario);
+
+    this.router.navigate(['/perfil'], {
+      state: {
+        usuario: usuario
+      }
+    });
+
+  } catch (error) {
+    console.error('Error cargando usuario:', error);
     this.router.navigate(['/login']);
   }
+}
 
   volver() { this.navCtrl.back(); }
 }

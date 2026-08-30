@@ -57,3 +57,11 @@ ion-progress-bar {
   border-radius: 4px;
   margin-top: 8px;
 }
+
+.map-container {
+  width: 100%;
+  height: 260px;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 1;
+}

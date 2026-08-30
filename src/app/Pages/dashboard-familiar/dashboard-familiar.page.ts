@@ -1,7 +1,8 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '../../Services/api';
 import Chart from 'chart.js/auto';
+import * as L from 'leaflet';
 
 @Component({
   selector: 'app-dashboard-familiar',
@@ -9,7 +10,7 @@ import Chart from 'chart.js/auto';
   styleUrls: ['./dashboard-familiar.page.scss'],
   standalone: false
 })
-export class DashboardFamiliarPage implements OnInit, OnDestroy {
+export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
 
   runPaciente = '';
   pacienteNombre = '';
@@ -30,6 +31,11 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy {
   bpmData: number[] = [];
   timestamps: string[] = [];
   maxDataPoints = 30;
+
+  @ViewChild('mapContainer') mapContainer!: ElementRef<HTMLDivElement>;
+  private map: L.Map | null = null;
+  private marker: L.Marker | null = null;
+  private readonly MAPA_INICIAL: [number, number] = [-33.4489, -70.6693];
 
   private pollingInterval: any;
   private ultimoId = 0;
@@ -62,6 +68,7 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy {
 
   ngAfterViewInit() {
     this.iniciarGrafico();
+    this.iniciarMapa();
   }
 
   ngOnDestroy() {
@@ -127,6 +134,7 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy {
     if (bateria !== null && bateria !== undefined) this.bateriaActual = bateria;
     if (lat) this.latitud = lat;
     if (lng) this.longitud = lng;
+    this.actualizarMarcador();
 
     if (bpm > this.maximo) this.maximo = bpm;
     if (bpm < this.minimo) this.minimo = bpm;
@@ -177,6 +185,43 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy {
         }
       }
     });
+  }
+
+  private iniciarMapa() {
+    const el = this.mapContainer?.nativeElement;
+    if (!el) return;
+
+    const posicionInicial: [number, number] =
+      (this.latitud && this.longitud) ? [this.latitud, this.longitud] : this.MAPA_INICIAL;
+
+    this.map = L.map(el).setView(posicionInicial, 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(this.map);
+
+    const icono = L.icon({
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41]
+    });
+
+    this.marker = L.marker(posicionInicial, { icon: icono }).addTo(this.map)
+      .bindPopup(`<b>${this.pacienteNombre || 'Paciente'}</b>`);
+
+    // Fuerza el recálculo del tamaño tras renderizar el contenido
+    setTimeout(() => this.map?.invalidateSize(), 300);
+  }
+
+  private actualizarMarcador() {
+    if (!this.map || !this.marker) return;
+    if (!this.latitud || !this.longitud) return;
+
+    const posicion: [number, number] = [this.latitud, this.longitud];
+    this.marker.setLatLng(posicion);
+    this.map.panTo(posicion);
   }
 
   cambiarPaciente() {

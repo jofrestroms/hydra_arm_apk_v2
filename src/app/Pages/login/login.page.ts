@@ -1,8 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { UsuarioService } from '../../Services/usuario-service';
-import { ApiService } from '../../Services/api';
-import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-login',
@@ -19,32 +17,33 @@ export class LoginPage implements OnInit {
 
   constructor(
     private usuarioService: UsuarioService,
-    private router: Router,
-    private api: ApiService,
-    private user: UsuarioService
-  ) {}
+    private router: Router
+  ) { }
 
-  ngOnInit() {}
+  ngOnInit() { }
 
   onRutInput(event: any) {
-    let value = event.target.value.replace(/[.\s-]/g, '');
-    if (!value) return;
+    let value = event.target.value
+      .replace(/[^0-9kK]/g, '')
+      .toUpperCase();
+
+    if (!value) {
+      this.rut = '';
+      return;
+    }
+
     if (value.length > 1) {
       const cuerpo = value.slice(0, -1);
       const dv = value.slice(-1);
-      this.rut = `${cuerpo}-${dv}`;
+
+      const rutLimpio = cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+      this.rut = `${rutLimpio}-${dv}`;
     } else {
       this.rut = value;
     }
 
-    const rutLimpio = value.replace(/[.\s]/g, '').toLowerCase();
-    if (rutLimpio.length > 1 && !rutLimpio.includes('-')) {
-      const cuerpo = rutLimpio.slice(0, -1);
-      const dv = rutLimpio.slice(-1);
-      this.rut = `${cuerpo}-${dv}`;
-    } else {
-      this.rut = rutLimpio;
-    }
+    event.target.value = this.rut;
   }
 
   async login() {
@@ -57,30 +56,39 @@ export class LoginPage implements OnInit {
     this.mensajeError = '';
 
     try {
-      const encontrado = await this.usuarioService.Iniciar_sesion(this.rut, this.password);
+      try {
+        const encontrado = await this.usuarioService.Iniciar_sesion(this.rut, this.password);
 
-      if (encontrado) {
-        const sesion = { tipo: 'paciente', dbId: encontrado.dbId, display: encontrado.display };
-        localStorage.setItem('hydra_sesion', JSON.stringify(sesion));
-        this.router.navigate(['/corazon']);
-        return;
+        if (encontrado) {
+          const sesion = { tipo: 'paciente', dbId: encontrado.dbId };
+          localStorage.setItem('hydra_sesion', JSON.stringify(sesion));
+          this.router.navigate(['/corazon']);
+          return;
+        }
+      } catch (error) {
+        console.error('Error al iniciar sesión como paciente:', error);
+
       }
 
-      const familiar = await firstValueFrom(this.api.getFamiliar(this.rut));
-      if (familiar && familiar.pasword === this.password) {
-        const sesion = { tipo: 'familiar', runFamiliar: familiar.run, display: familiar };
-        localStorage.setItem('hydra_sesion', JSON.stringify(sesion));
+      try {
+        const resultado = await this.usuarioService.Iniciar_sesion_familiar(this.rut, this.password);
 
-        const pacientes = await firstValueFrom(this.api.getPacientesDeFamiliar(this.rut));
-        if (pacientes && pacientes.length > 0) {
+        if (resultado) {
+          const familiar = resultado.familiar;
+          const pacientes = resultado.pacientes;
+          const sesion = { tipo: 'familiar', runFamiliar: familiar.run, display: familiar };
+          localStorage.setItem('hydra_sesion', JSON.stringify(sesion));
+
           this.router.navigate(['/seleccionar-paciente'], {
             state: { familiar, pacientes }
           });
-        } else {
-          this.mensajeError = 'No tienes pacientes asignados';
+          return;
         }
-        return;
+
+      } catch (error) {
+        console.error('Error al buscar familiar:', error);
       }
+
 
       this.mensajeError = 'RUT o contraseña inválidos';
     } catch {

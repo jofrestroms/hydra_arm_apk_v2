@@ -4,7 +4,7 @@
     <ion-buttons slot="end">
       <ion-button (click)="irPerfil()">
         <ion-avatar>
-          <img src="assets/default-avatar.png" alt="Avatar">
+          <img [src]="previewUrl || 'assets/default-avatar.png'" class="profile-img">
         </ion-avatar>
       </ion-button>
     </ion-buttons>

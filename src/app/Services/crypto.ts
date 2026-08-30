@@ -46,13 +46,6 @@ export class Crypto {
     return res.json();
   }
 
-  async eliminarDocumento(runP: string, nombreArchivo: string): Promise<any> {
-    const res = await fetch(`${this.API_URL}/pacientes/${runP}/documentos/${encodeURIComponent(nombreArchivo)}`, {
-      method: 'DELETE'
-    });
-    return res.json();
-  }
-
   async subirFotoPerfil(runP: string, archivo: File): Promise<any> {
     const formData = new FormData();
     formData.append('imagen', archivo);
