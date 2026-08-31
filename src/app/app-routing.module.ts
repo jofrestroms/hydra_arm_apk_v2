@@ -12,6 +12,10 @@ const routes: Routes = [
     loadChildren: () => import('./Pages/login/login.module').then(m => m.LoginPageModule)
   },
   {
+    path: 'olvidar-contrasena',
+    loadChildren: () => import('./Pages/olvidar-contrasena/olvidar-contrasena.module').then(m => m.OlvidarContrasenaPageModule)
+  },
+  {
     path: 'corazon',
     loadChildren: () => import('./Pages/corazon/corazon.module').then(m => m.CorazonPageModule)
   },

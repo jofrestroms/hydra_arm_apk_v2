@@ -22,6 +22,10 @@ export class LoginPage implements OnInit {
 
   ngOnInit() { }
 
+  irARecuperar() {
+    this.router.navigate(['/olvidar-contrasena']);
+  }
+
   onRutInput(event: any) {
     let value = event.target.value
       .replace(/[^0-9kK]/g, '')

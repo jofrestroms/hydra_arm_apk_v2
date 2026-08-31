@@ -97,6 +97,12 @@ export class ApiService {
     );
   }
 
+  updateFamiliar(run: string, data: any) {
+    return this.handleRequest(
+      this.http.put<any>(`${this.url}/familiares/${run}`, data, { headers: this.getHeaders() })
+    );
+  }
+
   postBpm(data: any) {
     return this.handleRequest(
       this.http.post<any>(`${this.url}/bpm`, data, { headers: this.getHeaders() })

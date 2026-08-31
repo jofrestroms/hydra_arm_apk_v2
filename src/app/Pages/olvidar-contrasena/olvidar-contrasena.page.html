@@ -1,0 +1,70 @@
+<ion-content [fullscreen]="true" class="recuperar-background">
+  <div class="recuperar-container">
+    <div class="recuperar-header">
+      <ion-icon name="key-outline" class="logo-icon"></ion-icon>
+      <h1>Recuperar contraseña</h1>
+      <p *ngIf="paso === 1">Ingresa tu RUT para buscar tu cuenta</p>
+      <p *ngIf="paso === 2">Verifica que eres el dueño de la cuenta</p>
+      <p *ngIf="paso === 3">Crea una nueva contraseña</p>
+    </div>
+
+    <div class="form-card">
+      <!-- PASO 1: RUT -->
+      <div *ngIf="paso === 1">
+        <ion-item lines="none" class="custom-input">
+          <ion-icon name="card-outline" slot="start"></ion-icon>
+          <ion-input label="RUT" labelPlacement="floating" placeholder="12.345.678-k" [(ngModel)]="rut" (ionInput)="onRutInput($event)" type="text"></ion-input>
+        </ion-item>
+
+        <ion-text *ngIf="mensajeError" color="danger" class="error-message"><p>{{ mensajeError }}</p></ion-text>
+        <ion-text *ngIf="mensajeExito" color="success" class="success-message"><p>{{ mensajeExito }}</p></ion-text>
+
+        <ion-button expand="block" class="primary-btn" [disabled]="cargando" (click)="buscarCuenta()">
+          <ion-spinner *ngIf="cargando" slot="start"></ion-spinner>
+          {{ cargando ? 'Buscando...' : 'Continuar' }}
+        </ion-button>
+      </div>
+
+      <!-- PASO 2: VERIFICACIÓN DE TELÉFONO -->
+      <div *ngIf="paso === 2">
+        <ion-item lines="none" class="custom-input">
+          <ion-icon name="call-outline" slot="start"></ion-icon>
+          <ion-input label="Teléfono" labelPlacement="floating" placeholder="9 1234 5678" [(ngModel)]="telefono" type="tel"></ion-input>
+        </ion-item>
+
+        <ion-text *ngIf="mensajeError" color="danger" class="error-message"><p>{{ mensajeError }}</p></ion-text>
+        <ion-text *ngIf="mensajeExito" color="success" class="success-message"><p>{{ mensajeExito }}</p></ion-text>
+
+        <ion-button expand="block" class="primary-btn" [disabled]="cargando" (click)="verificarTelefono()">
+          {{ cargando ? 'Verificando...' : 'Verificar' }}
+        </ion-button>
+      </div>
+
+      <!-- PASO 3: NUEVA CONTRASEÑA -->
+      <div *ngIf="paso === 3">
+        <ion-item lines="none" class="custom-input">
+          <ion-icon name="lock-closed-outline" slot="start"></ion-icon>
+          <ion-input label="Nueva contraseña" labelPlacement="floating" placeholder="Mínimo 6 caracteres" [(ngModel)]="nuevaPassword" type="password"></ion-input>
+        </ion-item>
+        <ion-item lines="none" class="custom-input">
+          <ion-icon name="lock-closed-outline" slot="start"></ion-icon>
+          <ion-input label="Confirmar contraseña" labelPlacement="floating" placeholder="Repite tu contraseña" [(ngModel)]="confirmarPassword" type="password"></ion-input>
+        </ion-item>
+
+        <ion-text *ngIf="mensajeError" color="danger" class="error-message"><p>{{ mensajeError }}</p></ion-text>
+
+        <ion-button expand="block" class="primary-btn" [disabled]="cargando" (click)="cambiarPassword()">
+          <ion-spinner *ngIf="cargando" slot="start"></ion-spinner>
+          {{ cargando ? 'Guardando...' : 'Guardar contraseña' }}
+        </ion-button>
+      </div>
+
+      <div class="back-link">
+        <ion-button fill="clear" size="small" (click)="volver()">
+          <ion-icon name="arrow-back-outline" slot="start"></ion-icon>
+          Volver al inicio de sesión
+        </ion-button>
+      </div>
+    </div>
+  </div>
+</ion-content>
