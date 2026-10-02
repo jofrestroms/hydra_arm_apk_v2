@@ -2,6 +2,9 @@
   <ion-toolbar>
     <ion-title>Dashboard: {{ pacienteNombre }}</ion-title>
     <ion-buttons slot="end">
+      <ion-button (click)="abrirChat()">
+        <ion-icon name="chatbubble-ellipses-outline"></ion-icon>
+      </ion-button>
       <ion-button (click)="cambiarPaciente()">
         <ion-icon name="swap-horizontal-outline"></ion-icon>
       </ion-button>
@@ -17,7 +20,7 @@
 
     <ion-grid>
       <ion-row>
-        <ion-col size="6">
+        <ion-col size="4">
           <ion-card class="kpi-card">
             <ion-card-content>
               <div class="kpi-label">BPM Actual</div>
@@ -26,7 +29,18 @@
             </ion-card-content>
           </ion-card>
         </ion-col>
-        <ion-col size="6">
+        <ion-col size="4">
+          <ion-card class="kpi-card">
+            <ion-card-content>
+              <div class="kpi-label">SpO₂</div>
+              <div class="kpi-value" [style.color]="spo2Actual !== null && spo2Actual < 90 ? '#e74c3c' : '#0ea5e9'">
+                {{ spo2Actual !== null ? spo2Actual + '%' : '--' }}
+              </div>
+              <div class="kpi-unit">saturación O₂</div>
+            </ion-card-content>
+          </ion-card>
+        </ion-col>
+        <ion-col size="4">
           <ion-card class="kpi-card">
             <ion-card-content>
               <div class="kpi-label">Bateria</div>
@@ -88,7 +102,7 @@
     </ion-card>
 
     <ion-note color="medium" style="display:block; text-align:center;">
-      Actualizando cada 3 segundos | {{ totalLecturas }} lecturas
+      En tiempo real | {{ totalLecturas }} lecturas
     </ion-note>
 
   </div>

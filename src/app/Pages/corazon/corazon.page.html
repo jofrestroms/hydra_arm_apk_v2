@@ -2,6 +2,9 @@
   <ion-toolbar>
     <ion-title>Monitor Cardíaco</ion-title>
     <ion-buttons slot="end">
+      <ion-button (click)="irChat()">
+        <ion-icon name="chatbubble-ellipses-outline"></ion-icon>
+      </ion-button>
       <ion-button (click)="irPerfil()">
         <ion-avatar>
           <img [src]="previewUrl || 'assets/default-avatar.png'" class="profile-img">

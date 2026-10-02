@@ -78,12 +78,11 @@ export class UsuarioService {
       return;
     }
     try {
-      const run = await this.desencriptarRun(runP);
-      if (!run) {
+      if (!runP) {
         console.error('RUN inválido');
         return;
       }
-      const res = await this.subirFotoUsuario(run, this.file);
+      const res = await this.subirFotoUsuario(runP, this.file);
       console.log('Foto subida:', res);
     } catch (error) {
       console.error('Error al subir foto:', error);

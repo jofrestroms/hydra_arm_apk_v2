@@ -6,6 +6,7 @@ import { Observable } from 'rxjs';
 export class ApiService {
 
   private url = 'https://hydra-crud.onrender.com/api';
+  private geoUrl = 'https://geolocalizaci-n-1.onrender.com/api';
 
   constructor(
     private http: HttpClient
@@ -109,10 +110,80 @@ export class ApiService {
     );
   }
 
-  getBpmPorRango(runP: string, inicio: string, fin: string) {
-    const params = new HttpParams().set('runP', runP).set('inicio', inicio).set('fin', fin);
+  /**
+   * Historial de BPM de un paciente.
+   *
+   * Antes apuntaba a GET /api/bpm/search, que no existe en ningun backend:
+   * caia en obtenerBpmActual con runP="search" y devolvia 404. La ruta real es
+   * /api/bpm/{runP}/historial, que acepta un limite en vez de un rango.
+   *
+   * El runP viaja cifrado: la tabla bpm la sigue escribiendo el ESP32.
+   */
+  getBpmPorRango(runP: string, _inicio: string, _fin: string, limite = 100) {
+    const params = new HttpParams().set('limite', String(limite));
     return this.handleRequest(
-      this.http.get<any[]>(`${this.url}/bpm/search`, { headers: this.getHeaders(), params })
+      this.http.get<any[]>(`${this.url}/bpm/${encodeURIComponent(runP)}/historial`, { headers: this.getHeaders(), params })
+    );
+  }
+
+  // ── Mensajes (mensajería 1:1 paciente/familiar <-> cuidador/medico) ──
+
+  getEmpleados() {
+    return this.handleRequest(
+      this.http.get<any[]>(`${this.url}/empleados`, { headers: this.getHeaders() })
+    );
+  }
+
+  enviarMensaje(data: any) {
+    return this.handleRequest(
+      this.http.post<any>(`${this.url}/mensajes`, data, { headers: this.getHeaders() })
+    );
+  }
+
+  getConversacion(runA: string, runB: string) {
+    const params = new HttpParams().set('runA', runA).set('runB', runB);
+    return this.handleRequest(
+      this.http.get<any[]>(`${this.url}/mensajes/conversacion`, { headers: this.getHeaders(), params })
+    );
+  }
+
+  getNoLeidos(destinoRun: string, rolDestino: string) {
+    const params = new HttpParams().set('destinoRun', destinoRun).set('rolDestino', rolDestino);
+    return this.handleRequest(
+      this.http.get<any[]>(`${this.url}/mensajes/no-leidos`, { headers: this.getHeaders(), params })
+    );
+  }
+
+  marcarLeido(id: number) {
+    return this.handleRequest(
+      this.http.patch<any>(`${this.url}/mensajes/${id}/leer`, {}, { headers: this.getHeaders() })
+    );
+  }
+
+  eliminarMensaje(id: number) {
+    return this.handleRequest(
+      this.http.delete<any>(`${this.url}/mensajes/${id}`, { headers: this.getHeaders() })
+    );
+  }
+
+  // ── Geolocalización (API geolocalizaci-n) ──
+
+  postGeolocalizacion(data: any) {
+    return this.handleRequest(
+      this.http.post<any>(`${this.geoUrl}/geolocalizacion/actualizar`, data, { headers: this.getHeaders() })
+    );
+  }
+
+  getUbicacionActual(rut: string) {
+    return this.handleRequest(
+      this.http.get<any>(`${this.geoUrl}/geolocalizacion/${encodeURIComponent(rut)}`, { headers: this.getHeaders() })
+    );
+  }
+
+  getHistorialGeo(rut: string, limite?: number) {
+    const params = new HttpParams().set('limite', (limite || 200).toString());
+    return this.handleRequest(
+      this.http.get<any[]>(`${this.geoUrl}/geolocalizacion/${encodeURIComponent(rut)}/historial`, { headers: this.getHeaders(), params })
     );
   }
 }

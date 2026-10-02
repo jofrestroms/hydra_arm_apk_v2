@@ -84,11 +84,55 @@ export class Crypto {
     return res.json();
   }
 
-  private base64ToFile(base64: string, filename: string): File {
-    const byteString = atob(base64.split(',')[1]);
+  /**
+   * SHA-256 determinista de un RUN. Se usa para saber si un mensaje recibido
+   * por SSE es nuestro, ya que el RUN cifrado nunca sale del servidor.
+   */
+  async getHashRun(run: string): Promise<string> {
+    return this.get(`${this.API_URL}/user/cripto/hash?run=${encodeURIComponent(run)}`);
+  }
+
+  // ── Adjuntos de mensajería ──────────────────────────────────
+
+  /**
+   * Sube un adjunto a una conversación 1:1 y devuelve { url, nombre }.
+   * La carpeta se deriva del hash de ambos RUN, así que ninguno aparece
+   * en claro en la URL.
+   */
+  async subirAdjuntoMensaje(runA: string, runB: string, archivo: File): Promise<{ url: string; nombre: string }> {
+    const formData = new FormData();
+    formData.append('archivo', archivo);
+    formData.append('runA', runA);
+    formData.append('runB', runB);
+    const res = await fetch(`${this.API_URL}/mensajes/adjuntos`, {
+      method: 'POST',
+      body: formData
+    });
+    if (!res.ok) throw new Error(`Error subiendo el adjunto (HTTP ${res.status})`);
+    return res.json();
+  }
+
+  /** Borra un adjunto huérfano: el mensaje falló después de subir la imagen. */
+  async eliminarAdjunto(url: string): Promise<any> {
+    const res = await fetch(`${this.API_URL}/mensajes/adjuntos?url=${encodeURIComponent(url)}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error(`Error eliminando el adjunto (HTTP ${res.status})`);
+    return res.json();
+  }
+
+  /**
+   * Convierte un DataUrl de Camera.getPhoto en un File enviable por multipart.
+   * El MIME se toma del propio DataUrl: hardcodear image/png rompe las fotos
+   * de la cámara, que en Android llegan como image/jpeg.
+   */
+  base64ToFile(dataUrl: string, filename: string): File {
+    const partes = dataUrl.split(',');
+    const mime = /data:([^;]+);/.exec(partes[0])?.[1] || 'image/jpeg';
+    const byteString = atob(partes[1]);
     const ab = new ArrayBuffer(byteString.length);
     const ia = new Uint8Array(ab);
     for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    return new File([ab], filename, { type: 'image/png' });
+    return new File([ab], filename, { type: mime });
   }
 }

@@ -1,6 +1,8 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiService } from '../../Services/api';
+import { RealtimeService } from '../../Services/realtime';
+import { Crypto } from '../../Services/crypto';
 import Chart from 'chart.js/auto';
 import * as L from 'leaflet';
 
@@ -17,6 +19,7 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
   familiarNombre = '';
 
   bpmActual = '--';
+  spo2Actual: number | null = null;
   bateriaActual = 0;
   latitud = 0;
   longitud = 0;
@@ -35,14 +38,18 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('mapContainer') mapContainer!: ElementRef<HTMLDivElement>;
   private map: L.Map | null = null;
   private marker: L.Marker | null = null;
+  private polyline: L.Polyline | null = null;
+  private trailPoints: [number, number][] = [];
   private readonly MAPA_INICIAL: [number, number] = [-33.4489, -70.6693];
 
-  private pollingInterval: any;
   private ultimoId = 0;
+  private realtimeSuscripciones: any[] = [];
 
   constructor(
     private api: ApiService,
-    private router: Router
+    private realtime: RealtimeService,
+    private router: Router,
+    private cripto: Crypto
   ) {}
 
   ngOnInit() {
@@ -63,7 +70,8 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
     }
 
     this.cargarHistorialInicial();
-    this.iniciarPolling();
+    this.cargarHistorialPosicion();
+    void this.iniciarRealtime();
   }
 
   ngAfterViewInit() {
@@ -72,7 +80,7 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy() {
-    if (this.pollingInterval) clearInterval(this.pollingInterval);
+    this.realtime.desconectar();
     if (this.liveChart) this.liveChart.destroy();
   }
 
@@ -98,33 +106,89 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private iniciarPolling() {
-    this.pollingInterval = setInterval(async () => {
-      try {
-        const ahora = new Date();
-        const hace30s = new Date(ahora.getTime() - 30000);
-
-        const data: any = await this.api.getBpmPorRango(
-          this.runPaciente,
-          hace30s.toISOString(),
-          ahora.toISOString()
-        ).toPromise();
-
-        if (data && data.length > 0) {
-          const nuevos = data.filter((b: any) => b.idBpm > this.ultimoId);
-          nuevos.forEach((bpm: any) => {
-            if (bpm.valorBpm) {
-              this.agregarLectura(bpm.valorBpm, bpm.bateria, bpm.latitud, bpm.longitud);
-            }
-          });
-          if (nuevos.length > 0) {
-            this.ultimoId = Math.max(...nuevos.map((b: any) => b.idBpm));
-          }
+  private async cargarHistorialPosicion() {
+    try {
+      const data: any = await this.api.getHistorialGeo(this.runPaciente, 200).toPromise();
+      if (data && data.length > 0) {
+        this.trailPoints = data.reverse().map((h: any) => [h.latitud, h.longitud]);
+        if (this.map) {
+          this.polyline = L.polyline(this.trailPoints, { color: '#3b82f6', weight: 3, opacity: 0.7 }).addTo(this.map);
         }
-      } catch (err) {
-        console.error('Error polling', err);
+        const ultima = this.trailPoints[this.trailPoints.length - 1];
+        this.latitud = ultima[0];
+        this.longitud = ultima[1];
+        this.actualizarMarcador();
       }
-    }, 3000);
+    } catch (err) {
+      console.log('Sin historial de posición aún');
+    }
+  }
+
+  private agregarPuntoTrayectoria(lat: number, lng: number) {
+    const punto: [number, number] = [lat, lng];
+    this.trailPoints.push(punto);
+    if (this.map) {
+      if (this.polyline) {
+        this.polyline.addLatLng(punto);
+      } else {
+        this.polyline = L.polyline(this.trailPoints, { color: '#3b82f6', weight: 3, opacity: 0.7 }).addTo(this.map);
+      }
+    }
+  }
+
+  /**
+   * SHA-256 del RUN del paciente, que es lo que ahora guarda la columna
+   * geolocalizacion.paciente_run_p. El SSE entrega las filas crudas de
+   * Postgres, asi que el identificador llega como snake_case.
+   */
+  private hashRunPaciente = '';
+
+  private async iniciarRealtime() {
+    this.realtime.conectar(['hello', 'bpm', 'geolocalizacion']);
+
+    // Se calcula una sola vez, antes de suscribirse: el callback del SSE es
+    // sincrono y no puede esperar al hash en cada evento.
+    try {
+      this.hashRunPaciente = await this.cripto.getHashRun(this.runPaciente);
+    } catch (e) {
+      console.warn('No se pudo hashear el RUN, se omiten eventos de geolocalizacion', e);
+      this.hashRunPaciente = '';
+    }
+
+    this.realtimeSuscripciones.push(
+      this.realtime.on('bpm').subscribe((payload: any) => {
+        const fila = payload?.new;
+        if (!fila) return;
+        // bpm SIGUE guardando el RUN cifrado (lo escribe el ESP32), asi que
+        // aqui se compara contra el valor tal cual, sin hashear.
+        if (fila.paciente_run_p && fila.paciente_run_p !== this.runPaciente) return;
+        const spo2 = fila.spo2;
+        const valorBpm = fila.valor_bpm;
+        if (valorBpm != null) {
+          this.agregarLectura(valorBpm, fila.bateria, fila.latitud, fila.longitud);
+        }
+        if (spo2 != null) {
+          this.spo2Actual = spo2;
+        }
+      })
+    );
+    this.realtimeSuscripciones.push(
+      this.realtime.on('geolocalizacion').subscribe((payload: any) => {
+        const fila = payload?.new;
+        if (!fila) return;
+        // geolocalizacion guarda el SHA-256, no el ciphertext.
+        // Sin hash no se filtra: es preferible no mostrar nada que mostrar la
+        // ubicacion de otro paciente.
+        if (!this.hashRunPaciente) return;
+        if (fila.paciente_run_p && fila.paciente_run_p !== this.hashRunPaciente) return;
+        if (fila.latitud != null && fila.longitud != null) {
+          this.latitud = fila.latitud;
+          this.longitud = fila.longitud;
+          this.agregarPuntoTrayectoria(fila.latitud, fila.longitud);
+          this.actualizarMarcador();
+        }
+      })
+    );
   }
 
   private agregarLectura(bpm: number, bateria?: number, lat?: number, lng?: number) {
@@ -231,6 +295,10 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
         pacientes: []
       }
     });
+  }
+
+  abrirChat() {
+    this.router.navigate(['/chat-familiar']);
   }
 
   cerrarSesion() {

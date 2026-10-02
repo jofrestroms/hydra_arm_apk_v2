@@ -1,0 +1,100 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button (click)="volver()">
+        <ion-icon name="arrow-back-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title *ngIf="!contactoActual">Mensajería</ion-title>
+    <ion-title *ngIf="contactoActual">{{ contactoActual.nombre }}</ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="cerrarSesion()">
+        <ion-icon name="log-out-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+
+  <div *ngIf="!contactoActual" class="ion-padding">
+
+    <ion-note color="medium" style="display:block; margin-bottom: 15px;">
+      Conversando en nombre de <b>{{ pacienteNombre }}</b>. Elige a una persona del equipo de salud.
+    </ion-note>
+
+    <div *ngIf="cargandoContactos" style="text-align:center; padding: 30px 0;">
+      <ion-spinner name="crescent"></ion-spinner>
+      <p style="color: #999;">Cargando contactos...</p>
+    </div>
+
+    <div *ngIf="!cargandoContactos && sinContactos" style="text-align:center; padding: 30px 0; color: #999;">
+      <p>No hay médicos ni cuidadores disponibles.</p>
+    </div>
+
+    <ion-list *ngIf="!cargandoContactos && !sinContactos">
+      <ion-item *ngFor="let c of contactos" button detail (click)="abrirChat(c)">
+        <ion-avatar slot="start" class="avatar-contacto">
+          <span>{{ c.nombre.charAt(0) }}</span>
+        </ion-avatar>
+        <ion-label>
+          <h2>{{ c.nombre }}</h2>
+          <p>{{ c.rolLabel }}</p>
+        </ion-label>
+      </ion-item>
+    </ion-list>
+
+  </div>
+
+  <div *ngIf="contactoActual" class="vista-chat">
+
+    <div class="chat-enlinea">
+      <ion-note color="medium">
+        {{ contactoActual.rolLabel }} · conversación de <b>{{ pacienteNombre }}</b>
+      </ion-note>
+    </div>
+
+    <div class="chat-mensajes">
+      <div *ngIf="mensajes.length === 0" style="text-align:center; color:#999; margin-top: 60px;">
+        <ion-icon name="chatbubbles-outline" size="large"></ion-icon>
+        <p>No hay mensajes todavía.<br>Envía el primero para iniciar.</p>
+      </div>
+
+      <div *ngFor="let m of mensajes"
+           class="burbuja"
+           [ngClass]="m.rolOrigen === 'familiar' ? 'burbuja-mia' : 'burbuja-ellos'">
+        <div class="burbuja-contenido">
+          <img *ngIf="m.adjuntoUrl" [src]="m.adjuntoUrl" class="foto-adjunta" alt="Foto adjunta">
+          <span *ngIf="m.contenido">{{ m.contenido }}</span>
+        </div>
+        <div class="burbuja-hora">
+          {{ m.creadoEn ? (m.creadoEn | date: 'HH:mm') : '' }}
+          <span *ngIf="m.leido" style="font-size: 10px; color: #27ae60;">✓✓</span>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="fotoAdjuntaPreview" class="adjunto-preview">
+      <img [src]="fotoAdjuntaPreview" alt="Vista previa">
+      <ion-button fill="clear" size="small" color="danger" (click)="quitarFoto()">
+        <ion-icon slot="icon-only" name="close-circle"></ion-icon>
+      </ion-button>
+    </div>
+
+    <div class="chat-input">
+      <ion-button fill="clear" (click)="elegirFoto()" [disabled]="adjuntando || enviando">
+        <ion-icon slot="icon-only" name="camera-outline" [class.icono-cargando]="adjuntando"></ion-icon>
+      </ion-button>
+      <ion-input [(ngModel)]="mensajeTexto"
+                 placeholder="Escribe un mensaje..."
+                 (keyup.enter)="enviarMensaje()"
+                 class="input-mensaje">
+      </ion-input>
+      <ion-button (click)="enviarMensaje()" [disabled]="enviando || (!mensajeTexto.trim() && !fotoAdjunta)">
+        <ion-icon slot="icon-only" name="send"></ion-icon>
+      </ion-button>
+    </div>
+
+  </div>
+
+</ion-content>

@@ -32,6 +32,14 @@ const routes: Routes = [
     loadChildren: () => import('./Pages/dashboard-familiar/dashboard-familiar.module').then(m => m.DashboardFamiliarPageModule)
   },
   {
+    path: 'chat-familiar',
+    loadChildren: () => import('./Pages/chat-familiar/chat-familiar.module').then(m => m.ChatFamiliarPageModule)
+  },
+  {
+    path: 'chat-paciente',
+    loadChildren: () => import('./Pages/chat-paciente/chat-paciente.module').then(m => m.ChatPacientePageModule)
+  },
+  {
     path: '**',
     redirectTo: 'login'
   }

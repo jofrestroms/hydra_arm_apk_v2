@@ -35,7 +35,6 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
   ipInput = '';
   
   private readonly OFFLINE_SECRET_KEY = 'clave-local-ultra-segura-32bytes!';
-  private offlineQueue: string[] = [];
   private cryptoKey: CryptoKey | null = null;
   
   dispositivosBLE: { deviceId: string; name: string; rssi?: number }[] = [];
@@ -326,35 +325,22 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     return JSON.parse(new TextDecoder().decode(descifrado));
   }
 
-  private async guardarOffline(payload: any) {
-    try { const cifrado = await this.encrypt(payload); this.offlineQueue.push(cifrado); } catch (e) { console.error('Error guardando offline:', e); }
-  }
-
-  private async reenviarOffline() {
-    if (this.offlineQueue.length === 0) return;
-    for (const item of this.offlineQueue) {
-      try { const payload = await this.decrypt(item); await this.enviarSpringBoot(payload); } catch (e) { console.error('Error reenviando offline:', e); }
-    }
-    this.offlineQueue = [];
-  }
-
-  private async enviarSpringBoot(payload: any): Promise<boolean> {
-    if (!this.runP) return false;
-    try {
-      const body = { runP: this.runP, valorBpm: payload.bpm, bateria: payload.bateria, latitud: payload.latitud, longitud: payload.longitud, fecha: new Date().toISOString() };
-      await this.api.postBpm(body).toPromise();
-      return true;
-    } catch (err) { console.error('Error enviando BPM a API:', err); return false; }
+  private enviarGeolocalizacion(lat: number, lng: number) {
+    if (!this.runP || !lat || !lng) return;
+    this.api.postGeolocalizacion({
+      rutPaciente: this.runP,
+      latitud: lat,
+      longitud: lng
+    }).toPromise().catch(() => {});
   }
 
   private async procesarDatosBLE(bpm: number, sys: number, dia: number, battery?: number) {
     if (battery !== undefined) this.bateriaActual = battery;
-    const payload = { bpm, systolic: sys, diastolic: dia, bateria: this.bateriaActual, latitud: this.latitudActual, longitud: this.longitudActual, device: this.dispositivoConectado, timestamp: new Date().toISOString() };
     this.bpmActual = bpm.toString();
     this.presionActual = `${sys}/${dia}`;
     this.datosRecibidos = `BPM: ${bpm} | ${sys}/${dia} | Bat: ${this.bateriaActual}%`;
     this.actualizarGrafico(bpm);
-    try { const enviado = await this.enviarSpringBoot(payload); if (!enviado) await this.guardarOffline(payload); else await this.reenviarOffline(); } catch { await this.guardarOffline(payload); }
+    this.enviarGeolocalizacion(this.latitudActual, this.longitudActual);
   }
 
   private iniciarGrafico() {
@@ -406,6 +392,10 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
   async mostrarToast(mensaje: string, color: string) {
     const toast = await this.toastCtrl.create({ message: mensaje, duration: 2500, color, position: 'bottom' });
     await toast.present();
+  }
+
+  irChat() {
+    this.router.navigate(['/chat-paciente']);
   }
 
   async irPerfil() {
