@@ -1,6 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { NavController, AlertController } from '@ionic/angular';
+import { firstValueFrom } from 'rxjs';
+import { ApiService } from '../../Services/api';
 import { UsuarioService } from '../../Services/usuario-service';
 
 @Component({
@@ -19,6 +21,7 @@ export class SeleccionarPacientePage implements OnInit {
     private router: Router,
     private navCtrl: NavController,
     private alertCtrl: AlertController,
+    private api: ApiService,
     private usuarioService: UsuarioService
   ) {}
 
@@ -39,8 +42,46 @@ export class SeleccionarPacientePage implements OnInit {
         })
       );
       this.pacientes = pacientesDescifrados;
+      this.cargando = false;
+      return;
     }
+
+    await this.cargarDesdeSesion();
     this.cargando = false;
+  }
+
+  private async cargarDesdeSesion() {
+    const sesion = localStorage.getItem('hydra_sesion');
+    if (!sesion) {
+      this.router.navigate(['/login']);
+      return;
+    }
+
+    let s: any = null;
+    try {
+      s = JSON.parse(sesion);
+    } catch {
+      s = null;
+    }
+
+    if (!s || s.tipo !== 'familiar' || !s.runFamiliar) {
+      this.router.navigate(['/login']);
+      return;
+    }
+
+    this.familiar = s.display || { run: s.runFamiliar };
+
+    try {
+      const pacientes = await firstValueFrom(this.api.getPacientesDeFamiliar(s.runFamiliar));
+      this.pacientes = await Promise.all(
+        (pacientes || []).map(async (p: any) => ({
+          display: await this.usuarioService.obtenerPacienteLegible(p),
+          dbId: p.runP
+        }))
+      );
+    } catch (error) {
+      console.error('Error cargando pacientes del familiar:', error);
+    }
   }
 
   seleccionarPaciente(paciente: any) {

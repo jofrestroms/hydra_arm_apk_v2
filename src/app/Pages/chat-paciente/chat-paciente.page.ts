@@ -6,6 +6,7 @@ import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { ApiService } from '../../Services/api';
 import { Crypto } from '../../Services/crypto';
 import { RealtimeService } from '../../Services/realtime';
+import { UbicacionService } from '../../Services/ubicacion';
 
 @Component({
   selector: 'app-chat-paciente',
@@ -36,6 +37,7 @@ export class ChatPacientePage implements OnInit, OnDestroy {
     private api: ApiService,
     private cripto: Crypto,
     private realtime: RealtimeService,
+    private ubicacion: UbicacionService,
     private router: Router,
     private actionSheetCtrl: ActionSheetController,
     private alertCtrl: AlertController,
@@ -289,6 +291,7 @@ export class ChatPacientePage implements OnInit, OnDestroy {
   }
 
   cerrarSesion() {
+    void this.ubicacion.detener();
     localStorage.removeItem('hydra_sesion');
     this.router.navigate(['/login']);
   }

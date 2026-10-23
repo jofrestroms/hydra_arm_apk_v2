@@ -4,9 +4,11 @@ import { Geolocation } from '@capacitor/geolocation';
 import Chart from 'chart.js/auto';
 import { PluginListenerHandle } from '@capacitor/core';
 import { Router } from '@angular/router';
-import { ApiService } from '../../Services/api';
+import { Subscription } from 'rxjs';
 import { NavController, AlertController, ToastController } from '@ionic/angular';
 import { Esp32Service } from '../../Services/esp32';
+import { RealtimeService } from '../../Services/realtime';
+import { UbicacionService } from '../../Services/ubicacion';
 import { UsuarioService } from '../../Services/usuario-service';
 import { Crypto } from '../../Services/crypto';
 
@@ -23,7 +25,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
   connectionStatus = false;
   dispositivoConectado = 'Ninguno';
   datosRecibidos = 'Inicializando...';
-  modoConexion: 'ble' | 'wifi' | 'simulacion' | 'ninguna' = 'ninguna';
+  modoConexion: 'ble' | 'wifi' | 'simulacion' | 'realtime' | 'ninguna' = 'ninguna';
   
   bpmActual = '--';
   presionActual = '--/--';
@@ -52,15 +54,17 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
   private reconexionInterval: any;
   private gpsInterval: any;
   private listeners: PluginListenerHandle[] = [];
+  private realtimeSuscripciones: Subscription[] = [];
   runP = '';
   
   constructor(
-    private api: ApiService,
     private router: Router,
     private navCtrl: NavController,
     private alertCtrl: AlertController,
     private toastCtrl: ToastController,
     private esp32: Esp32Service,
+    private realtime: RealtimeService,
+    private ubicacion: UbicacionService,
     private usuarioService: UsuarioService,
     private Crypto: Crypto
   ) { }
@@ -89,10 +93,8 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     this.esp32.cargarCredenciales();
     this.macInput = this.esp32.getMac();
     this.ipInput = this.esp32.getIp();
-    await this.initializeBluetooth();
-    if (this.macInput) {
-      await this.conectarConMac();
-    }
+    this.iniciarRealtimeBpm();
+    void this.ubicacion.iniciar(this.runP);
     this.iniciarGPS();
   }
 
@@ -104,6 +106,9 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     this.detenerSimulacionBLE();
     this.detenerReconexionAutomatica();
     this.limpiarListeners();
+    this.realtimeSuscripciones.forEach(s => s.unsubscribe());
+    this.realtimeSuscripciones = [];
+    this.realtime.desconectar();
     if (this.gpsInterval) clearInterval(this.gpsInterval);
   }
 
@@ -325,13 +330,32 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     return JSON.parse(new TextDecoder().decode(descifrado));
   }
 
-  private enviarGeolocalizacion(lat: number, lng: number) {
-    if (!this.runP || !lat || !lng) return;
-    this.api.postGeolocalizacion({
-      rutPaciente: this.runP,
-      latitud: lat,
-      longitud: lng
-    }).toPromise().catch(() => {});
+  private iniciarRealtimeBpm() {
+    if (!this.runP) return;
+    this.datosRecibidos = 'Conectando al monitor...';
+    this.realtime.conectar(['hello', 'bpm']);
+    this.realtimeSuscripciones.push(
+      this.realtime.on('bpm').subscribe((payload: any) => {
+        const fila = payload?.new;
+        if (!fila) return;
+        if (fila.paciente_run_p && fila.paciente_run_p !== this.runP) return;
+        this.procesarDatosRealtime(fila);
+      })
+    );
+  }
+
+  private procesarDatosRealtime(fila: any) {
+    const bpm = fila.valor_bpm;
+    if (bpm == null) return;
+    this.connectionStatus = true;
+    this.modoConexion = 'realtime';
+    this.dispositivoConectado = 'Monitor Hydra (ESP32)';
+    this.bpmActual = String(bpm);
+    if (fila.bateria != null) this.bateriaActual = fila.bateria;
+    if (fila.latitud != null) this.latitudActual = fila.latitud;
+    if (fila.longitud != null) this.longitudActual = fila.longitud;
+    this.datosRecibidos = `BPM: ${bpm} | SpO2: ${fila.spo2 ?? '--'} | Bat: ${this.bateriaActual}%`;
+    this.actualizarGrafico(bpm);
   }
 
   private async procesarDatosBLE(bpm: number, sys: number, dia: number, battery?: number) {
@@ -340,7 +364,6 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     this.presionActual = `${sys}/${dia}`;
     this.datosRecibidos = `BPM: ${bpm} | ${sys}/${dia} | Bat: ${this.bateriaActual}%`;
     this.actualizarGrafico(bpm);
-    this.enviarGeolocalizacion(this.latitudActual, this.longitudActual);
   }
 
   private iniciarGrafico() {
@@ -354,6 +377,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private actualizarGrafico(bpm: number) {
+    if (!this.heartChart) return;
     this.bpmData.push(bpm);
     this.timestamps.push(new Date().toLocaleTimeString());
     if (this.bpmData.length > 30) { this.bpmData.shift(); this.timestamps.shift(); }

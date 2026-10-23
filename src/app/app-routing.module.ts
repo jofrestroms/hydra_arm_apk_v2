@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
 import { PreloadAllModules, RouterModule, Routes } from '@angular/router';
+import { authGuard } from './auth.guard';
 
 const routes: Routes = [
   {
@@ -17,6 +18,7 @@ const routes: Routes = [
   },
   {
     path: 'corazon',
+    canActivate: [authGuard],
     loadChildren: () => import('./Pages/corazon/corazon.module').then(m => m.CorazonPageModule)
   },
   {
@@ -29,6 +31,7 @@ const routes: Routes = [
   },
   {
     path: 'dashboard-familiar',
+    canActivate: [authGuard],
     loadChildren: () => import('./Pages/dashboard-familiar/dashboard-familiar.module').then(m => m.DashboardFamiliarPageModule)
   },
   {

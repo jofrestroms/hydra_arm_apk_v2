@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { UsuarioService } from '../../Services/usuario-service';
+import { leerSesion, rutaInicial } from '../../auth.guard';
 
 @Component({
   selector: 'app-login',
@@ -20,7 +21,12 @@ export class LoginPage implements OnInit {
     private router: Router
   ) { }
 
-  ngOnInit() { }
+  ngOnInit() {
+    const destino = rutaInicial(leerSesion());
+    if (destino) {
+      this.router.navigateByUrl(destino);
+    }
+  }
 
   irARecuperar() {
     this.router.navigate(['/olvidar-contrasena']);

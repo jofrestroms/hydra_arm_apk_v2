@@ -1,4 +1,6 @@
 import { Component } from '@angular/core';
+import { Router } from '@angular/router';
+import { leerSesion, rutaInicial } from './auth.guard';
 
 @Component({
   selector: 'app-root',
@@ -7,5 +9,13 @@ import { Component } from '@angular/core';
   standalone: false,
 })
 export class AppComponent {
-  constructor() {}
+  constructor(private router: Router) {
+    this.restaurarSesion();
+  }
+
+  private restaurarSesion() {
+    const destino = rutaInicial(leerSesion());
+    if (!destino) return;
+    setTimeout(() => this.router.navigateByUrl(destino), 0);
+  }
 }
