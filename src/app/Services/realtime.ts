@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { Observable, Subject } from 'rxjs';
 
@@ -16,6 +16,8 @@ export class RealtimeService {
   private errorSubject = new Subject<void>();
   private reconectar = false;
   private conRetraso = false;
+
+  constructor(private zone: NgZone) {}
 
   private getUrl(): string {
     return (environment.realtimeUrl || 'http://localhost:8083') + '/api/realtime/stream';
@@ -77,6 +79,6 @@ export class RealtimeService {
     let json: any = null;
     try { json = JSON.parse(String(data)); } catch (e) { }
     const subj = this.subjects.get(evento);
-    if (subj) subj.next(json);
+    if (subj) this.zone.run(() => subj.next(json));
   }
 }

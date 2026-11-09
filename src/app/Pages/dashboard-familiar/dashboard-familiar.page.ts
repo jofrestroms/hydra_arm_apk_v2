@@ -1,8 +1,12 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Capacitor } from '@capacitor/core';
+import { Subscription } from 'rxjs';
 import { ApiService } from '../../Services/api';
 import { RealtimeService } from '../../Services/realtime';
+import { SupabaseService } from '../../Services/supabase';
 import { Crypto } from '../../Services/crypto';
+import { BatteryService } from '../../Services/battery';
 import Chart from 'chart.js/auto';
 import * as L from 'leaflet';
 
@@ -20,7 +24,10 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
 
   bpmActual = '--';
   spo2Actual: number | null = null;
+  esNativo = Capacitor.isNativePlatform();
   bateriaActual = 0;
+  bateriaLeida = false;
+  cargandoDispositivo = false;
   latitud = 0;
   longitud = 0;
 
@@ -42,17 +49,20 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
   private trailPoints: [number, number][] = [];
   private readonly MAPA_INICIAL: [number, number] = [-33.4489, -70.6693];
 
-  private ultimoId = 0;
   private realtimeSuscripciones: any[] = [];
+  private bpmSub?: Subscription;
+  private bateriaSub?: () => void;
 
   constructor(
     private api: ApiService,
     private realtime: RealtimeService,
     private router: Router,
-    private cripto: Crypto
+    private cripto: Crypto,
+    private supabase: SupabaseService,
+    private battery: BatteryService
   ) {}
 
-  ngOnInit() {
+  async ngOnInit() {
     const sesion = localStorage.getItem('hydra_sesion');
     if (!sesion) {
       this.router.navigate(['/login']);
@@ -69,9 +79,11 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    this.cargarHistorialInicial();
+    await this.cargarHistorialBpm();
+    this.iniciarBpmTiempoReal();
+    this.iniciarBateriaDispositivo();
     this.cargarHistorialPosicion();
-    void this.iniciarRealtime();
+    void this.iniciarRealtimeGeo();
   }
 
   ngAfterViewInit() {
@@ -80,30 +92,45 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy() {
+    this.bpmSub?.unsubscribe();
+    this.bateriaSub?.();
     this.realtime.desconectar();
     if (this.liveChart) this.liveChart.destroy();
   }
 
-  private async cargarHistorialInicial() {
-    const ahora = new Date();
-    const hace5min = new Date(ahora.getTime() - 5 * 60000);
-
+  private async cargarHistorialBpm() {
     try {
-      const data: any = await this.api.getBpmPorRango(
-        this.runPaciente,
-        hace5min.toISOString(),
-        ahora.toISOString()
-      ).toPromise();
-
-      if (data && data.length > 0) {
-        data.forEach((bpm: any) => {
-          this.agregarLectura(bpm.valorBpm, bpm.bateria, bpm.latitud, bpm.longitud);
-        });
-        this.ultimoId = Math.max(...data.map((b: any) => b.idBpm));
-      }
+      const filas = await this.supabase.getHistorialBpm(this.runPaciente, 50);
+      filas.forEach(f => this.agregarLectura(f.valor_bpm));
     } catch (err) {
-      console.error('Error cargando historial', err);
+      console.error('Error cargando historial BPM', err);
     }
+  }
+
+  private iniciarBpmTiempoReal(): void {
+    if (!this.runPaciente) return;
+    this.bpmSub = this.supabase.verBpm(this.runPaciente).subscribe({
+      next: (fila: any) => {
+        if (fila.paciente_run_p && fila.paciente_run_p !== this.runPaciente) return;
+        if (fila.valor_bpm != null) this.agregarLectura(fila.valor_bpm);
+        if (fila.spo2 != null) this.spo2Actual = fila.spo2;
+      },
+      error: (e) => console.error('Error en el canal BPM', e)
+    });
+  }
+
+  private iniciarBateriaDispositivo(): void {
+    if (!this.esNativo) return;
+
+    this.bateriaSub = this.battery.suscribir((estado) => {
+      if (!estado) {
+        this.bateriaLeida = false;
+        return;
+      }
+      this.bateriaActual = estado.nivel;
+      this.cargandoDispositivo = estado.cargando;
+      this.bateriaLeida = true;
+    });
   }
 
   private async cargarHistorialPosicion() {
@@ -137,14 +164,13 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
-   * SHA-256 del RUN del paciente, que es lo que ahora guarda la columna
-   * geolocalizacion.paciente_run_p. El SSE entrega las filas crudas de
-   * Postgres, asi que el identificador llega como snake_case.
+   * SHA-256 del RUN del paciente. Es lo que guarda la columna
+   * geolocalizacion.paciente_run_p.
    */
   private hashRunPaciente = '';
 
-  private async iniciarRealtime() {
-    this.realtime.conectar(['hello', 'bpm', 'geolocalizacion']);
+  private async iniciarRealtimeGeo() {
+    this.realtime.conectar(['hello', 'geolocalizacion']);
 
     // Se calcula una sola vez, antes de suscribirse: el callback del SSE es
     // sincrono y no puede esperar al hash en cada evento.
@@ -156,31 +182,16 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
     }
 
     this.realtimeSuscripciones.push(
-      this.realtime.on('bpm').subscribe((payload: any) => {
-        const fila = payload?.new;
-        if (!fila) return;
-        // bpm SIGUE guardando el RUN cifrado (lo escribe el ESP32), asi que
-        // aqui se compara contra el valor tal cual, sin hashear.
-        if (fila.paciente_run_p && fila.paciente_run_p !== this.runPaciente) return;
-        const spo2 = fila.spo2;
-        const valorBpm = fila.valor_bpm;
-        if (valorBpm != null) {
-          this.agregarLectura(valorBpm, fila.bateria, fila.latitud, fila.longitud);
-        }
-        if (spo2 != null) {
-          this.spo2Actual = spo2;
-        }
-      })
-    );
-    this.realtimeSuscripciones.push(
       this.realtime.on('geolocalizacion').subscribe((payload: any) => {
         const fila = payload?.new;
         if (!fila) return;
-        // geolocalizacion guarda el SHA-256, no el ciphertext.
+        // El bridge convierte las columnas a camelCase; se aceptan ambos
+        // formatos para no romper si en el futuro se cambia el contrato.
+        const runEvento = fila.pacienteRunP ?? fila.paciente_run_p;
         // Sin hash no se filtra: es preferible no mostrar nada que mostrar la
         // ubicacion de otro paciente.
         if (!this.hashRunPaciente) return;
-        if (fila.paciente_run_p && fila.paciente_run_p !== this.hashRunPaciente) return;
+        if (!runEvento || runEvento !== this.hashRunPaciente) return;
         if (fila.latitud != null && fila.longitud != null) {
           this.latitud = fila.latitud;
           this.longitud = fila.longitud;
@@ -191,11 +202,10 @@ export class DashboardFamiliarPage implements OnInit, OnDestroy, AfterViewInit {
     );
   }
 
-  private agregarLectura(bpm: number, bateria?: number, lat?: number, lng?: number) {
+  private agregarLectura(bpm: number, lat?: number, lng?: number) {
     this.bpmActual = bpm.toString();
     this.totalLecturas++;
 
-    if (bateria !== null && bateria !== undefined) this.bateriaActual = bateria;
     if (lat) this.latitud = lat;
     if (lng) this.longitud = lng;
     this.actualizarMarcador();

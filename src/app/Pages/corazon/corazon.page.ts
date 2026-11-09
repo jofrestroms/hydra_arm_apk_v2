@@ -2,15 +2,16 @@ import { Component, OnInit, OnDestroy, AfterViewInit, ElementRef, ViewChild } fr
 import { BluetoothLe } from '@capacitor-community/bluetooth-le';
 import { Geolocation } from '@capacitor/geolocation';
 import Chart from 'chart.js/auto';
-import { PluginListenerHandle } from '@capacitor/core';
+import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { NavController, AlertController, ToastController } from '@ionic/angular';
 import { Esp32Service } from '../../Services/esp32';
-import { RealtimeService } from '../../Services/realtime';
 import { UbicacionService } from '../../Services/ubicacion';
+import { SupabaseService } from '../../Services/supabase';
 import { UsuarioService } from '../../Services/usuario-service';
 import { Crypto } from '../../Services/crypto';
+import { BatteryService } from '../../Services/battery';
 
 @Component({
   selector: 'app-corazon',
@@ -29,7 +30,10 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
   
   bpmActual = '--';
   presionActual = '--/--';
-  bateriaActual = 100;
+  esNativo = Capacitor.isNativePlatform();
+  bateriaActual = 0;
+  bateriaLeida = false;
+  cargandoDispositivo = false;
   latitudActual = -33.4489;
   longitudActual = -70.6693;
   
@@ -54,7 +58,8 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
   private reconexionInterval: any;
   private gpsInterval: any;
   private listeners: PluginListenerHandle[] = [];
-  private realtimeSuscripciones: Subscription[] = [];
+  private bpmSub?: Subscription;
+  private bateriaSub?: () => void;
   runP = '';
   
   constructor(
@@ -63,10 +68,11 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     private alertCtrl: AlertController,
     private toastCtrl: ToastController,
     private esp32: Esp32Service,
-    private realtime: RealtimeService,
+    private supabase: SupabaseService,
     private ubicacion: UbicacionService,
     private usuarioService: UsuarioService,
-    private Crypto: Crypto
+    private Crypto: Crypto,
+    private battery: BatteryService
   ) { }
   
   previewUrl: string = '';
@@ -93,7 +99,9 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     this.esp32.cargarCredenciales();
     this.macInput = this.esp32.getMac();
     this.ipInput = this.esp32.getIp();
-    this.iniciarRealtimeBpm();
+    await this.cargarBpmActual();
+    this.iniciarBpmTiempoReal();
+    this.iniciarBateriaDispositivo();
     void this.ubicacion.iniciar(this.runP);
     this.iniciarGPS();
   }
@@ -106,9 +114,8 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     this.detenerSimulacionBLE();
     this.detenerReconexionAutomatica();
     this.limpiarListeners();
-    this.realtimeSuscripciones.forEach(s => s.unsubscribe());
-    this.realtimeSuscripciones = [];
-    this.realtime.desconectar();
+    this.bpmSub?.unsubscribe();
+    this.bateriaSub?.();
     if (this.gpsInterval) clearInterval(this.gpsInterval);
   }
 
@@ -201,7 +208,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
       const value = new TextDecoder().decode(bytes);
       try {
         const json = JSON.parse(value);
-        this.procesarDatosBLE(json.bpm, json.sys ?? 120, json.dia ?? 80, json.battery);
+        this.procesarDatosBLE(json.bpm, json.sys ?? 120, json.dia ?? 80);
       } catch (e) { console.error('Error parseando BLE', e); }
     });
     this.listeners.push(listener);
@@ -218,7 +225,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
       this.modoConexion = 'ble';
       this.datosRecibidos = 'Conectado por BLE';
       await this.mostrarToast('Conectado por BLE', 'success');
-      await this.esp32.activarNotificaciones((bpm, sys, dia) => { this.procesarDatosBLE(bpm, sys, dia, this.bateriaActual); });
+      await this.esp32.activarNotificaciones((bpm, sys, dia) => { this.procesarDatosBLE(bpm, sys, dia); });
     } else {
       await this.mostrarToast('BLE fallo, intentando WiFi...', 'warning');
       await this.conectarConIp();
@@ -251,7 +258,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     this.reconexionInterval = setInterval(async () => {
       const datos = await this.esp32.getDatosWifi();
       if (datos) {
-        this.procesarDatosBLE(datos.bpm, datos.sys, datos.dia, this.bateriaActual);
+        this.procesarDatosBLE(datos.bpm, datos.sys, datos.dia);
       } else {
         await this.mostrarToast('WiFi perdido, reconectando...', 'warning');
         this.connectionStatus = false;
@@ -274,7 +281,7 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
         this.dispositivoConectado = `ESP32 BLE (${this.esp32.getMac()})`;
         this.datosRecibidos = 'Reconectado por BLE';
         await this.mostrarToast('Reconectado por BLE', 'success');
-        await this.esp32.activarNotificaciones((bpm, sys, dia) => { this.procesarDatosBLE(bpm, sys, dia, this.bateriaActual); });
+        await this.esp32.activarNotificaciones((bpm, sys, dia) => { this.procesarDatosBLE(bpm, sys, dia); });
       } else if (resultado === 'wifi') {
         this.clearReconexionInterval();
         this.connectionStatus = true;
@@ -330,39 +337,76 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     return JSON.parse(new TextDecoder().decode(descifrado));
   }
 
-  private iniciarRealtimeBpm() {
+  private iniciarBpmTiempoReal(): void {
     if (!this.runP) return;
     this.datosRecibidos = 'Conectando al monitor...';
-    this.realtime.conectar(['hello', 'bpm']);
-    this.realtimeSuscripciones.push(
-      this.realtime.on('bpm').subscribe((payload: any) => {
-        const fila = payload?.new;
-        if (!fila) return;
+    this.bpmSub = this.supabase.verBpm(this.runP).subscribe({
+      next: (fila: any) => {
         if (fila.paciente_run_p && fila.paciente_run_p !== this.runP) return;
-        this.procesarDatosRealtime(fila);
-      })
-    );
+        this.procesarDatosRealtime(fila, true);
+      },
+      error: (e) => {
+        console.error('Error en el canal BPM', e);
+        this.connectionStatus = false;
+        this.datosRecibidos = 'Sin conexion en tiempo real';
+      }
+    });
   }
 
-  private procesarDatosRealtime(fila: any) {
+  private iniciarBateriaDispositivo(): void {
+    if (!this.esNativo) return;
+
+    this.bateriaSub = this.battery.suscribir((estado) => {
+      if (!estado) {
+        this.bateriaLeida = false;
+        return;
+      }
+      this.bateriaActual = estado.nivel;
+      this.cargandoDispositivo = estado.cargando;
+      this.bateriaLeida = true;
+    });
+  }
+
+  private async cargarBpmActual(): Promise<void> {
+    try {
+      const fila = await this.supabase.getBpmActual(this.runP);
+      if (fila) this.procesarDatosRealtime(fila, false);
+    } catch (e) {
+      console.warn('No se pudo cargar el BPM actual', e);
+    }
+  }
+
+  private procesarDatosRealtime(fila: any, enVivo = true): void {
     const bpm = fila.valor_bpm;
     if (bpm == null) return;
-    this.connectionStatus = true;
+
+    const fechaMs = fila.fecha ? new Date(fila.fecha).getTime() : 0;
+    const reciente = fechaMs > 0 && (Date.now() - fechaMs) < 15000;
+    this.connectionStatus = enVivo || reciente;
     this.modoConexion = 'realtime';
     this.dispositivoConectado = 'Monitor Hydra (ESP32)';
     this.bpmActual = String(bpm);
-    if (fila.bateria != null) this.bateriaActual = fila.bateria;
+    // Por pedido del usuario, el valor de SpO2 se muestra en la tarjeta de presión arterial.
+    if (fila.spo2 != null) this.presionActual = String(fila.spo2);
     if (fila.latitud != null) this.latitudActual = fila.latitud;
     if (fila.longitud != null) this.longitudActual = fila.longitud;
-    this.datosRecibidos = `BPM: ${bpm} | SpO2: ${fila.spo2 ?? '--'} | Bat: ${this.bateriaActual}%`;
+
+    if (enVivo) {
+      const bateriaTxt = this.esNativo && this.bateriaLeida ? ` | Bat: ${this.bateriaActual}%` : '';
+      this.datosRecibidos = `BPM: ${bpm} | SpO2: ${fila.spo2 ?? '--'}${bateriaTxt}`;
+    } else {
+      const hora = fila.fecha ? new Date(fila.fecha).toLocaleTimeString() : 'sin fecha';
+      this.datosRecibidos = `Ultimo dato: BPM ${bpm} | SpO2: ${fila.spo2 ?? '--'} (${hora})`;
+    }
+
     this.actualizarGrafico(bpm);
   }
 
-  private async procesarDatosBLE(bpm: number, sys: number, dia: number, battery?: number) {
-    if (battery !== undefined) this.bateriaActual = battery;
+  private async procesarDatosBLE(bpm: number, sys: number, dia: number) {
     this.bpmActual = bpm.toString();
     this.presionActual = `${sys}/${dia}`;
-    this.datosRecibidos = `BPM: ${bpm} | ${sys}/${dia} | Bat: ${this.bateriaActual}%`;
+    const bateriaTxt = this.esNativo && this.bateriaLeida ? ` | Bat: ${this.bateriaActual}%` : '';
+    this.datosRecibidos = `BPM: ${bpm} | ${sys}/${dia}${bateriaTxt}`;
     this.actualizarGrafico(bpm);
   }
 
@@ -391,13 +435,11 @@ export class CorazonPage implements OnInit, OnDestroy, AfterViewInit {
     this.modoConexion = 'simulacion';
     this.dispositivoConectado = 'Sensor BLE Simulado';
     this.datosRecibidos = 'Simulacion BLE activa';
-    this.bateriaActual = 100;
     this.simulationInterval = setInterval(() => {
       const bpm = Math.round(65 + Math.random() * 25);
       const sys = Math.round(110 + Math.random() * 15);
       const dia = Math.round(70 + Math.random() * 10);
-      if (this.bateriaActual > 0) this.bateriaActual = Math.max(0, this.bateriaActual - 0.5);
-      this.procesarDatosBLE(bpm, sys, dia, Math.round(this.bateriaActual));
+      this.procesarDatosBLE(bpm, sys, dia);
     }, 1500);
   }
 

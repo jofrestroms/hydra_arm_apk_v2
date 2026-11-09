@@ -35,10 +35,10 @@
       <div class="card-value">{{ presionActual }}</div>
       <div>mmHg</div>
     </div>
-    <div class="card-box bateria-box">
-      <div>Batería</div>
-      <div class="card-value">{{ bateriaActual }}%</div>
-      <div>{{ bateriaActual > 20 ? 'Cargado' : 'Bajo' }}</div>
+    <div class="card-box bateria-box" *ngIf="esNativo">
+      <div>Batería del dispositivo</div>
+      <div class="card-value">{{ bateriaLeida ? bateriaActual + '%' : '--' }}</div>
+      <div>{{ !bateriaLeida ? 'Leyendo...' : (cargandoDispositivo ? 'Cargando' : (bateriaActual > 20 ? 'Cargado' : 'Bajo')) }}</div>
     </div>
     <div class="heart-shape"></div>
   </div>

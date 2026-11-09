@@ -68,3 +68,12 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
+
+# Local secrets and signing files
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+google-services.json
